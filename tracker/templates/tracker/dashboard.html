@@ -1,0 +1,44 @@
+{% extends 'tracker/base.html' %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-4">
+        <div class="card mb-4 shadow-sm">
+            <div class="card-body">
+                <h5 class="card-title">Статистика по {{ vehicle.brand }}</h5>
+                <p class="card-text">Средний расход:
+                    <strong class="text-primary">
+                        {% if avg_consumption %}{{ avg_consumption }} л/100км{% else %}Данных мало{% endif %}
+                    </strong>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-8">
+        <h3>История заправок</h3>
+        <table class="table table-hover bg-white shadow-sm">
+            <thead class="table-dark">
+                <tr>
+                    <th>Дата</th>
+                    <th>Пробег</th>
+                    <th>Литры</th>
+                    <th>Сеть АЗС</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ref in refuelings %}
+                <tr>
+                    <td>{{ ref.date }}</td>
+                    <td>{{ ref.odometer }} км</td>
+                    <td>{{ ref.fuel_amount }} л</td>
+                    <td>{{ ref.network.name }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="4">Записей пока нет</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
