@@ -20,3 +20,21 @@ def dashboard(request):
         'vehicle': vehicle
     }
     return render(request, 'tracker/dashboard.html', context)
+
+
+from django.shortcuts import render, redirect
+from .forms import RefuelingForm
+
+
+# ... (остальные импорты)
+
+def add_refueling(request):
+    if request.method == 'POST':
+        form = RefuelingForm(request.POST)
+        if form.is_valid():
+            form.save()
+            return redirect('dashboard')  # После сохранения возвращаемся на главную
+    else:
+        form = RefuelingForm()
+
+    return render(request, 'tracker/add_refueling.html', {'form': form})

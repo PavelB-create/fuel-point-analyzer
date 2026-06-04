@@ -1,23 +1,45 @@
 {% extends 'tracker/base.html' %}
 
 {% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>Мониторинг топлива</h2>
+    <a href="{% url 'add_refueling' %}" class="btn btn-primary">+ Добавить заправку</a>
+</div>
+
 <div class="row">
+    <!-- Левая колонка: Статистика и График -->
     <div class="col-md-4">
-        <div class="card mb-4 shadow-sm">
+        <div class="card mb-4 shadow-sm border-primary">
             <div class="card-body">
                 <h5 class="card-title">Статистика по {{ vehicle.brand }}</h5>
                 <p class="card-text">Средний расход:
-                    <strong class="text-primary">
+                    <strong class="text-primary h4">
                         {% if avg_consumption %}{{ avg_consumption }} л/100км{% else %}Данных мало{% endif %}
                     </strong>
                 </p>
             </div>
         </div>
+
+        {% if chart %}
+        <div class="card mb-4 shadow-sm">
+            <div class="card-header bg-success text-white">Аналитика расхода</div>
+            <div class="card-body text-center p-0">
+                <img src="data:image/png;base64,{{ chart }}" class="img-fluid" alt="График расхода">
+            </div>
+        </div>
+        {% endif %}
     </div>
 
+    <!-- Правая колонка: Карта и Таблица -->
     <div class="col-md-8">
+        <!-- КАРТА -->
+        <div class="card mb-4 shadow-sm">
+            <div class="card-header bg-dark text-white">География заправок</div>
+            <div id="map" style="height: 350px;"></div> <!-- ВАЖНО: высота здесь -->
+        </div>
+
         <h3>История заправок</h3>
-        <table class="table table-hover bg-white shadow-sm">
+        <table class="table table-hover bg-white shadow-sm border">
             <thead class="table-dark">
                 <tr>
                     <th>Дата</th>
@@ -41,4 +63,30 @@
         </table>
     </div>
 </div>
+
+<!-- СКРИПТ КАРТЫ -->
+<script>
+    // Создаем карту и центрируем на последней заправке или Москве
+    var map = L.map('map').setView([55.75, 37.61], 5);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap'
+    }).addTo(map);
+
+    // Добавляем маркеры для всех заправок
+    var bounds = [];
+    {% for ref in refuelings %}
+        {% if ref.latitude and ref.longitude %}
+            var marker = L.marker([{{ ref.latitude }}, {{ ref.longitude }}])
+                .addTo(map)
+                .bindPopup("<b>{{ ref.network.name }}</b><br>{{ ref.fuel_amount }} л.");
+            bounds.push([{{ ref.latitude }}, {{ ref.longitude }}]);
+        {% endif %}
+    {% endfor %}
+
+    // Автоматически масштабируем карту, чтобы все маркеры были видны
+    if (bounds.length > 0) {
+        map.fitBounds(bounds);
+    }
+</script>
 {% endblock %}
