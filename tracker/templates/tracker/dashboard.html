@@ -49,16 +49,27 @@
     </div>
 </div>
 
-<script>
-    var map = L.map('map').setView([55.75, 37.61], 5);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-    var bounds = [];
-    {% for ref in refuelings %}
-        {% if ref.latitude %}
-            L.marker([{{ ref.latitude }}, {{ ref.longitude }}]).addTo(map).bindPopup("{{ ref.network.name }}");
-            bounds.push([{{ ref.latitude }}, {{ ref.longitude }}]);
-        {% endif %}
-    {% endfor %}
-    if (bounds.length > 0) { map.fitBounds(bounds); }
+<script type="text/javascript">
+    ymaps.ready(init);
+    function init() {
+        var myMap = new ymaps.Map("map", {
+            center: [55.75, 37.61],
+            zoom: 5
+        });
+
+        {% for ref in refuelings %}
+            {% if ref.latitude %}
+                var myPlacemark = new ymaps.Placemark([{{ ref.latitude }}, {{ ref.longitude }}], {
+                    balloonContent: '<b>{{ ref.network.name }}</b><br>Заправлено: {{ ref.fuel_amount }} л.'
+                });
+                myMap.geoObjects.add(myPlacemark);
+            {% endif %}
+        {% endfor %}
+
+        // Автоматическое масштабирование, чтобы увидеть все точки
+        if (myMap.geoObjects.getBounds()) {
+            myMap.setBounds(myMap.geoObjects.getBounds(), {checkZoomRange:true});
+        }
+    }
 </script>
 {% endblock %}

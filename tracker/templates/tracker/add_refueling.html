@@ -19,34 +19,31 @@
     </div>
 </div>
 
-<script>
-    var map = L.map('map').setView([55.75, 37.61], 10);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap'
-    }).addTo(map);
+<script type="text/javascript">
+    ymaps.ready(init);
+    var myMap, myPlacemark;
 
-    var marker;
+    function init() {
+        myMap = new ymaps.Map("map", {
+            center: [55.75, 37.61],
+            zoom: 10
+        });
 
-    map.on('click', function(e) {
-        var lat = e.latlng.lat;
-        var lng = e.latlng.lng;
+        myMap.events.add('click', function (e) {
+            var coords = e.get('coords');
 
-        if (marker) {
-            marker.setLatLng(e.latlng);
-        } else {
-            marker = L.marker(e.latlng).addTo(map);
-        }
+            // Если метка уже есть, перемещаем её, иначе создаем
+            if (myPlacemark) {
+                myPlacemark.geometry.setCoordinates(coords);
+            } else {
+                myPlacemark = new ymaps.Placemark(coords, {}, {preset: 'islands#blueCircleDotIconWithCaption'});
+                myMap.geoObjects.add(myPlacemark);
+            }
 
-        var latInput = document.getElementById('id_latitude');
-        var lngInput = document.getElementById('id_longitude');
-
-        if (latInput && lngInput) {
-            latInput.value = lat.toFixed(6);
-            lngInput.value = lng.toFixed(6);
-            console.log("Координаты установлены: " + lat + ", " + lng);
-        } else {
-            alert("Ошибка: Поля координат не найдены в форме!");
-        }
-    });
+            // Записываем в скрытые поля Django
+            document.getElementById('id_latitude').value = coords[0].toFixed(6);
+            document.getElementById('id_longitude').value = coords[1].toFixed(6);
+        });
+    }
 </script>
 {% endblock %}
