@@ -117,3 +117,4 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+YANDEX_MAPS_API_KEY = '02116524-4164-4b34-8a27-a8be2a5a885a'

@@ -1,51 +1,66 @@
 {% extends 'tracker/base.html' %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h2>Мониторинг топлива</h2>
-    <a href="{% url 'add_refueling' %}" class="btn btn-primary">+ Добавить заправку</a>
-</div>
-
-<div class="row">
-    <div class="col-md-4">
-        <div class="card mb-4 shadow-sm border-primary">
-            <div class="card-body text-center">
-                <h5 class="card-title">{{ vehicle.brand }} {{ vehicle.model }}</h5>
-                <p class="h3 text-primary">
-                    {% if avg_consumption %}{{ avg_consumption }} л/100км{% else %}Нужно 2 заправки{% endif %}
-                </p>
-            </div>
-        </div>
-
-        {% if chart %}
-        <div class="card mb-4 shadow-sm">
-            <div class="card-body p-0 text-center">
-                <img src="data:image/png;base64,{{ chart }}" class="img-fluid">
-            </div>
-        </div>
-        {% endif %}
+<div class="container-fluid mt-3">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="fw-bold text-dark">FuelPoint Analyzer</h2>
+        <a href="{% url 'add_refueling' %}" class="btn btn-primary btn-lg shadow-sm">+ Добавить заправку</a>
     </div>
 
-    <div class="col-md-8">
-        <div class="card mb-4 shadow-sm">
-            <div id="map" style="height: 350px;"></div>
+    <div class="row">
+        <!-- ЛЕВАЯ КОЛОНКА -->
+        <div class="col-lg-4">
+            <div class="card mb-4 shadow-sm border-0 text-center py-4">
+                <div class="card-body">
+                    <h6 class="text-uppercase text-muted small fw-bold">{{ vehicle.brand }} {{ vehicle.model }}</h6>
+                    {% if stats %}
+                        <div class="display-5 fw-bold text-primary">{{ stats.avg_consumption }}</div>
+                        <div class="text-primary mb-3">л/100км</div>
+                        <div class="badge bg-light text-dark p-2 px-3 border">
+                            Стоимость км: <strong>{{ stats.avg_cost_km }} руб.</strong>
+                        </div>
+                    {% else %}
+                        <div class="h5 text-danger py-3">Нужно 2 заправки</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            {% if chart %}
+            <div class="card shadow-sm border-0 overflow-hidden mb-4">
+                <div class="card-header bg-white border-0 py-3"><h6 class="m-0 fw-bold">Динамика расхода</h6></div>
+                <div class="card-body p-0">
+                    <img src="data:image/png;base64,{{ chart }}" class="img-fluid w-100">
+                </div>
+            </div>
+            {% endif %}
         </div>
 
-        <table class="table table-hover shadow-sm border">
-            <thead class="table-dark">
-                <tr><th>Дата</th><th>Пробег</th><th>Литры</th><th>Сеть</th></tr>
-            </thead>
-            <tbody>
-                {% for ref in refuelings %}
-                <tr>
-                    <td>{{ ref.date }}</td>
-                    <td>{{ ref.odometer }} км</td>
-                    <td>{{ ref.fuel_amount }} л</td>
-                    <td>{{ ref.network.name }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+        <!-- ПРАВАЯ КОЛОНКА -->
+        <div class="col-lg-8">
+            <div class="card shadow-sm border-0 overflow-hidden mb-4">
+                <div id="map" style="height: 450px; width: 100%;"></div>
+            </div>
+
+            <div class="card shadow-sm border-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr><th class="ps-3">Дата</th><th>Пробег</th><th>Литры</th><th>Сеть</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for ref in refuelings %}
+                            <tr>
+                                <td class="ps-3 text-muted">{{ ref.date }}</td>
+                                <td class="fw-bold">{{ ref.odometer }} км</td>
+                                <td>{{ ref.fuel_amount }} л</td>
+                                <td><span class="badge bg-secondary">{{ ref.network.name }}</span></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -53,23 +68,33 @@
     ymaps.ready(init);
     function init() {
         var myMap = new ymaps.Map("map", {
-            center: [55.75, 37.61],
-            zoom: 5
+            center: [56.8389, 60.6057],
+            zoom: 11,
+            controls: []
         });
 
+        var searchControl = new ymaps.control.SearchControl({
+            options: {
+                provider: 'yandex#map',
+                noPlacemark: false,
+                noSuggestPanel: true, // ОТКЛЮЧАЕМ ПОДСКАЗКИ, чтобы не было ошибки
+                placeholderContent: 'Адрес (напр. Ленина 1)'
+            }
+        });
+
+        myMap.controls.add(searchControl);
+        myMap.controls.add('zoomControl');
+        myMap.controls.add('typeSelector');
+        myMap.controls.add('fullscreenControl');
+
+        // Отрисовка маркеров
         {% for ref in refuelings %}
             {% if ref.latitude %}
-                var myPlacemark = new ymaps.Placemark([{{ ref.latitude }}, {{ ref.longitude }}], {
-                    balloonContent: '<b>{{ ref.network.name }}</b><br>Заправлено: {{ ref.fuel_amount }} л.'
-                });
-                myMap.geoObjects.add(myPlacemark);
+                myMap.geoObjects.add(new ymaps.Placemark([{{ ref.latitude }}, {{ ref.longitude }}], {
+                    balloonContent: '<b>{{ ref.network.name }}</b>'
+                }, { preset: 'islands#blueGasStationIcon' }));
             {% endif %}
         {% endfor %}
-
-        // Автоматическое масштабирование, чтобы увидеть все точки
-        if (myMap.geoObjects.getBounds()) {
-            myMap.setBounds(myMap.geoObjects.getBounds(), {checkZoomRange:true});
-        }
     }
 </script>
 {% endblock %}

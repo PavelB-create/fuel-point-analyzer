@@ -25,25 +25,44 @@
 
     function init() {
         myMap = new ymaps.Map("map", {
-            center: [55.75, 37.61],
-            zoom: 10
+            center: [56.8389, 60.6057],
+            zoom: 11
         });
 
+        // Поиск только по адресам
+        var searchControl = new ymaps.control.SearchControl({
+            options: {
+                provider: 'yandex#map',
+                noPlacemark: true
+            }
+        });
+        myMap.controls.add(searchControl);
+
+        // Клик по результату поиска
+        searchControl.events.add('resultselect', function (e) {
+            var index = e.get('index');
+            searchControl.getResult(index).then(function (res) {
+                var coords = res.geometry.getCoordinates();
+                updateMarker(coords);
+            });
+        });
+
+        // Клик по карте
         myMap.events.add('click', function (e) {
             var coords = e.get('coords');
+            updateMarker(coords);
+        });
 
-            // Если метка уже есть, перемещаем её, иначе создаем
+        function updateMarker(coords) {
             if (myPlacemark) {
                 myPlacemark.geometry.setCoordinates(coords);
             } else {
-                myPlacemark = new ymaps.Placemark(coords, {}, {preset: 'islands#blueCircleDotIconWithCaption'});
+                myPlacemark = new ymaps.Placemark(coords, {}, {preset: 'islands#redIcon'});
                 myMap.geoObjects.add(myPlacemark);
             }
-
-            // Записываем в скрытые поля Django
             document.getElementById('id_latitude').value = coords[0].toFixed(6);
             document.getElementById('id_longitude').value = coords[1].toFixed(6);
-        });
+        }
     }
 </script>
 {% endblock %}
