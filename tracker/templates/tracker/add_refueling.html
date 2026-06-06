@@ -2,20 +2,35 @@
 
 {% block content %}
 <div class="row">
-    <div class="col-md-6">
-        <div class="card shadow">
-            <div class="card-header bg-primary text-white"><h4>Новая заправка</h4></div>
+    <div class="col-lg-5 col-md-6 mb-4">
+        <div class="card shadow-sm">
+            <div class="card-header bg-primary text-white py-3">
+                <h5 class="mb-0 fw-bold">Добавить новую заправку</h5>
+            </div>
             <div class="card-body">
-                <form method="post" id="refuel-form">
+                <form method="post">
                     {% csrf_token %}
-                    {{ form.as_p }}
-                    <button type="submit" class="btn btn-success w-100">Сохранить</button>
+                    {% for field in form %}
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-muted">{{ field.label }}</label>
+                            {{ field }}
+                        </div>
+                    {% endfor %}
+                    <hr>
+                    <button type="submit" class="btn btn-success btn-lg w-100 shadow-sm">Сохранить заправку</button>
+                    <a href="{% url 'dashboard' %}" class="btn btn-link w-100 text-muted mt-2">Отмена</a>
                 </form>
             </div>
         </div>
     </div>
-    <div class="col-md-6">
-        <div id="map" style="height: 500px; border-radius: 10px; border: 2px solid #ccc;"></div>
+
+    <div class="col-lg-7 col-md-6">
+        <div class="card shadow-sm overflow-hidden">
+            <div class="card-header bg-dark text-white py-3">
+                <h6 class="mb-0">Кликните на карту, чтобы выбрать АЗС</h6>
+            </div>
+            <div id="map" style="height: 600px; width: 100%;"></div>
+        </div>
     </div>
 </div>
 
@@ -24,28 +39,40 @@
     var myMap, myPlacemark;
 
     function init() {
+        // Создаем карту
         myMap = new ymaps.Map("map", {
-            center: [56.8389, 60.6057],
-            zoom: 11
+            center: [56.8389, 60.6057], // Екатеринбург
+            zoom: 11,
+            controls: ['zoomControl', 'searchControl', 'fullscreenControl']
         });
 
-        // Поиск только по адресам
-        var searchControl = new ymaps.control.SearchControl({
-            options: {
-                provider: 'yandex#map',
-                noPlacemark: true
+        // Настройка поиска только по адресам (бесплатно)
+        var searchControl = myMap.controls.get('searchControl');
+        searchControl.options.set({ provider: 'yandex#map', noSuggestPanel: true });
+
+        // Функция обновления метки и данных в форме
+        function updateMarker(coords) {
+            if (myPlacemark) {
+                myPlacemark.geometry.setCoordinates(coords);
+            } else {
+                myPlacemark = new ymaps.Placemark(coords, {}, {
+                    preset: 'islands#redIcon',
+                    draggable: true
+                });
+                myMap.geoObjects.add(myPlacemark);
+
+                // Если пользователь перетащит метку
+                myPlacemark.events.add('dragend', function() {
+                    updateInputs(myPlacemark.geometry.getCoordinates());
+                });
             }
-        });
-        myMap.controls.add(searchControl);
+            updateInputs(coords);
+        }
 
-        // Клик по результату поиска
-        searchControl.events.add('resultselect', function (e) {
-            var index = e.get('index');
-            searchControl.getResult(index).then(function (res) {
-                var coords = res.geometry.getCoordinates();
-                updateMarker(coords);
-            });
-        });
+        function updateInputs(coords) {
+            document.getElementById('id_latitude').value = coords[0].toFixed(6);
+            document.getElementById('id_longitude').value = coords[1].toFixed(6);
+        }
 
         // Клик по карте
         myMap.events.add('click', function (e) {
@@ -53,16 +80,14 @@
             updateMarker(coords);
         });
 
-        function updateMarker(coords) {
-            if (myPlacemark) {
-                myPlacemark.geometry.setCoordinates(coords);
-            } else {
-                myPlacemark = new ymaps.Placemark(coords, {}, {preset: 'islands#redIcon'});
-                myMap.geoObjects.add(myPlacemark);
-            }
-            document.getElementById('id_latitude').value = coords[0].toFixed(6);
-            document.getElementById('id_longitude').value = coords[1].toFixed(6);
-        }
+        // Если выбрали результат в поиске
+        searchControl.events.add('resultselect', function (e) {
+            var index = e.get('index');
+            searchControl.getResult(index).then(function (res) {
+                var coords = res.geometry.getCoordinates();
+                updateMarker(coords);
+            });
+        });
     }
 </script>
 {% endblock %}
