@@ -9,7 +9,7 @@ from .services import get_advanced_analytics
 
 @login_required
 def dashboard(request):
-    # Показываем первую машину текущего пользователя
+    # Получаем машину текущего пользователя
     vehicle = Vehicle.objects.filter(owner=request.user).first()
 
     refuelings = Refueling.objects.none()
@@ -28,7 +28,7 @@ def dashboard(request):
         'vehicle': vehicle,
         'stats': stats,
         'chart': chart,
-        'yandex_key': settings.YANDEX_MAPS_API_KEY,
+        'dg_key': settings.DG_API_KEY,  # Передаем ключ 2ГИС
     }
     return render(request, 'tracker/dashboard.html', context)
 
@@ -50,17 +50,15 @@ def add_refueling(request):
         form = RefuelingForm(request.POST)
         if form.is_valid():
             refueling = form.save(commit=False)
-            # Проверка безопасности: владеет ли пользователь этой машиной
             if refueling.vehicle.owner == request.user:
                 refueling.save()
                 return redirect('dashboard')
     else:
         form = RefuelingForm()
-        # Показываем в выпадающем списке только машины текущего пользователя
         form.fields['vehicle'].queryset = Vehicle.objects.filter(owner=request.user)
 
     context = {
         'form': form,
-        'yandex_key': settings.YANDEX_MAPS_API_KEY
+        'dg_key': settings.DG_API_KEY
     }
     return render(request, 'tracker/add_refueling.html', context)

@@ -1,22 +1,22 @@
 {% extends 'tracker/base.html' %}
 
 {% block content %}
-<div class="container-fluid mt-3">
+<div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2 class="fw-bold text-dark">FuelPoint Analyzer</h2>
-        <a href="{% url 'add_refueling' %}" class="btn btn-primary btn-lg shadow-sm">+ Добавить заправку</a>
+        <h2 class="fw-bold">Аналитика топлива</h2>
+        <a href="{% url 'add_refueling' %}" class="btn btn-primary btn-lg shadow-sm rounded-pill px-4">+ Добавить заправку</a>
     </div>
 
     <div class="row">
-        <!-- ЛЕВАЯ КОЛОНКА -->
+        <!-- Левая колонка -->
         <div class="col-lg-4">
-            <div class="card mb-4 shadow-sm border-0 text-center py-4">
+            <div class="card mb-4 shadow-sm text-center py-4 border-start border-primary border-5">
                 <div class="card-body">
                     <h6 class="text-uppercase text-muted small fw-bold">{{ vehicle.brand }} {{ vehicle.model }}</h6>
                     {% if stats %}
                         <div class="display-5 fw-bold text-primary">{{ stats.avg_consumption }}</div>
                         <div class="text-primary mb-3">л/100км</div>
-                        <div class="badge bg-light text-dark p-2 px-3 border">
+                        <div class="badge bg-light text-dark p-2 px-3 border rounded-pill">
                             Стоимость км: <strong>{{ stats.avg_cost_km }} руб.</strong>
                         </div>
                     {% else %}
@@ -35,7 +35,7 @@
             {% endif %}
         </div>
 
-        <!-- ПРАВАЯ КОЛОНКА -->
+        <!-- Правая колонка -->
         <div class="col-lg-8">
             <div class="card shadow-sm border-0 overflow-hidden mb-4">
                 <div id="map" style="height: 450px; width: 100%;"></div>
@@ -45,7 +45,7 @@
                 <div class="table-responsive">
                     <table class="table table-hover mb-0">
                         <thead class="table-light">
-                            <tr><th class="ps-3">Дата</th><th>Пробег</th><th>Литры</th><th>Сеть</th></tr>
+                            <tr><th class="ps-3">Дата</th><th>Пробег</th><th>Литры</th><th>АЗС</th></tr>
                         </thead>
                         <tbody>
                             {% for ref in refuelings %}
@@ -53,7 +53,7 @@
                                 <td class="ps-3 text-muted">{{ ref.date }}</td>
                                 <td class="fw-bold">{{ ref.odometer }} км</td>
                                 <td>{{ ref.fuel_amount }} л</td>
-                                <td><span class="badge bg-secondary">{{ ref.network.name }}</span></td>
+                                <td><span class="badge bg-secondary rounded-pill">{{ ref.network.name }}</span></td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -64,37 +64,21 @@
     </div>
 </div>
 
-<script type="text/javascript">
-    ymaps.ready(init);
-    function init() {
-        var myMap = new ymaps.Map("map", {
-            center: [56.8389, 60.6057],
-            zoom: 11,
-            controls: []
-        });
+<script>
+    // Инициализация карты 2ГИС
+    const map = new mapgl.Map('map', {
+        center: [60.6057, 56.8389], // [Долгота, Широта] - Екатеринбург
+        zoom: 11,
+        key: '{{ dg_key }}',
+    });
 
-        var searchControl = new ymaps.control.SearchControl({
-            options: {
-                provider: 'yandex#map',
-                noPlacemark: false,
-                noSuggestPanel: true, // ОТКЛЮЧАЕМ ПОДСКАЗКИ, чтобы не было ошибки
-                placeholderContent: 'Адрес (напр. Ленина 1)'
-            }
-        });
-
-        myMap.controls.add(searchControl);
-        myMap.controls.add('zoomControl');
-        myMap.controls.add('typeSelector');
-        myMap.controls.add('fullscreenControl');
-
-        // Отрисовка маркеров
-        {% for ref in refuelings %}
-            {% if ref.latitude %}
-                myMap.geoObjects.add(new ymaps.Placemark([{{ ref.latitude }}, {{ ref.longitude }}], {
-                    balloonContent: '<b>{{ ref.network.name }}</b>'
-                }, { preset: 'islands#blueGasStationIcon' }));
-            {% endif %}
-        {% endfor %}
-    }
+    // Добавление маркеров (в 2ГИС порядок [Lon, Lat])
+    {% for ref in refuelings %}
+        {% if ref.latitude %}
+            new mapgl.Marker(map, {
+                coordinates: [{{ ref.longitude }}, {{ ref.latitude }}],
+            });
+        {% endif %}
+    {% endfor %}
 </script>
 {% endblock %}

@@ -1,14 +1,14 @@
 {% extends 'tracker/base.html' %}
 
 {% block content %}
-<div class="row">
+<div class="row mt-2">
     <div class="col-lg-5 col-md-6 mb-4">
-        <div class="card shadow-sm">
+        <div class="card shadow border-0">
             <div class="card-header bg-primary text-white py-3">
-                <h5 class="mb-0 fw-bold">Добавить новую заправку</h5>
+                <h5 class="mb-0 fw-bold">Новая заправка</h5>
             </div>
             <div class="card-body">
-                <form method="post">
+                <form method="post" id="refuel-form">
                     {% csrf_token %}
                     {% for field in form %}
                         <div class="mb-3">
@@ -17,77 +17,48 @@
                         </div>
                     {% endfor %}
                     <hr>
-                    <button type="submit" class="btn btn-success btn-lg w-100 shadow-sm">Сохранить заправку</button>
-                    <a href="{% url 'dashboard' %}" class="btn btn-link w-100 text-muted mt-2">Отмена</a>
+                    <button type="submit" class="btn btn-success btn-lg w-100 rounded-pill shadow-sm">Сохранить</button>
+                    <a href="{% url 'dashboard' %}" class="btn btn-link w-100 text-muted mt-2">Назад</a>
                 </form>
             </div>
         </div>
     </div>
 
     <div class="col-lg-7 col-md-6">
-        <div class="card shadow-sm overflow-hidden">
+        <div class="card shadow border-0 overflow-hidden">
             <div class="card-header bg-dark text-white py-3">
-                <h6 class="mb-0">Кликните на карту, чтобы выбрать АЗС</h6>
+                <h6 class="mb-0">Кликните на карту для выбора АЗС</h6>
             </div>
             <div id="map" style="height: 600px; width: 100%;"></div>
         </div>
     </div>
 </div>
 
-<script type="text/javascript">
-    ymaps.ready(init);
-    var myMap, myPlacemark;
+<script>
+    // Карта 2ГИС
+    const map = new mapgl.Map('map', {
+        center: [60.6057, 56.8389],
+        zoom: 13,
+        key: '{{ dg_key }}',
+    });
 
-    function init() {
-        // Создаем карту
-        myMap = new ymaps.Map("map", {
-            center: [56.8389, 60.6057], // Екатеринбург
-            zoom: 11,
-            controls: ['zoomControl', 'searchControl', 'fullscreenControl']
-        });
+    let marker;
 
-        // Настройка поиска только по адресам (бесплатно)
-        var searchControl = myMap.controls.get('searchControl');
-        searchControl.options.set({ provider: 'yandex#map', noSuggestPanel: true });
+    // Клик по карте
+    map.on('click', (e) => {
+        const coords = e.lngLat; // [Lon, Lat]
 
-        // Функция обновления метки и данных в форме
-        function updateMarker(coords) {
-            if (myPlacemark) {
-                myPlacemark.geometry.setCoordinates(coords);
-            } else {
-                myPlacemark = new ymaps.Placemark(coords, {}, {
-                    preset: 'islands#redIcon',
-                    draggable: true
-                });
-                myMap.geoObjects.add(myPlacemark);
-
-                // Если пользователь перетащит метку
-                myPlacemark.events.add('dragend', function() {
-                    updateInputs(myPlacemark.geometry.getCoordinates());
-                });
-            }
-            updateInputs(coords);
-        }
-
-        function updateInputs(coords) {
-            document.getElementById('id_latitude').value = coords[0].toFixed(6);
-            document.getElementById('id_longitude').value = coords[1].toFixed(6);
-        }
-
-        // Клик по карте
-        myMap.events.add('click', function (e) {
-            var coords = e.get('coords');
-            updateMarker(coords);
-        });
-
-        // Если выбрали результат в поиске
-        searchControl.events.add('resultselect', function (e) {
-            var index = e.get('index');
-            searchControl.getResult(index).then(function (res) {
-                var coords = res.geometry.getCoordinates();
-                updateMarker(coords);
+        if (marker) {
+            marker.setCoordinates(coords);
+        } else {
+            marker = new mapgl.Marker(map, {
+                coordinates: coords,
             });
-        });
-    }
+        }
+
+        // Заполняем поля формы (Lat - coords[1], Lon - coords[0])
+        document.getElementById('id_latitude').value = coords[1].toFixed(6);
+        document.getElementById('id_longitude').value = coords[0].toFixed(6);
+    });
 </script>
 {% endblock %}
