@@ -8,7 +8,6 @@
     </div>
 
     <div class="row">
-        <!-- Левая колонка -->
         <div class="col-lg-4">
             <div class="card mb-4 shadow-sm text-center py-4 border-start border-primary border-5">
                 <div class="card-body">
@@ -35,22 +34,24 @@
             {% endif %}
         </div>
 
-        <!-- Правая колонка -->
         <div class="col-lg-8">
-            <div class="card shadow-sm border-0 overflow-hidden mb-4">
-                <div id="map" style="height: 450px; width: 100%;"></div>
+            <div class="card shadow-sm border-0 overflow-hidden mb-4 position-relative">
+                <div style="position: absolute; top: 10px; left: 10px; z-index: 1000; width: 280px;">
+                    <input type="text" id="map-search" class="form-control shadow border-0" placeholder="🔍 Найти на карте...">
+                </div>
+                <div id="map" style="height: 480px; width: 100%;"></div>
             </div>
 
             <div class="card shadow-sm border-0">
                 <div class="table-responsive">
-                    <table class="table table-hover mb-0">
+                    <table class="table table-hover mb-0 text-center">
                         <thead class="table-light">
-                            <tr><th class="ps-3">Дата</th><th>Пробег</th><th>Литры</th><th>АЗС</th></tr>
+                            <tr><th>Дата</th><th>Пробег</th><th>Литры</th><th>АЗС</th></tr>
                         </thead>
                         <tbody>
                             {% for ref in refuelings %}
                             <tr>
-                                <td class="ps-3 text-muted">{{ ref.date }}</td>
+                                <td class="text-muted small">{{ ref.date }}</td>
                                 <td class="fw-bold">{{ ref.odometer }} км</td>
                                 <td>{{ ref.fuel_amount }} л</td>
                                 <td><span class="badge bg-secondary rounded-pill">{{ ref.network.name }}</span></td>
@@ -65,20 +66,43 @@
 </div>
 
 <script>
-    // Инициализация карты 2ГИС
     const map = new mapgl.Map('map', {
-        center: [60.6057, 56.8389], // [Долгота, Широта] - Екатеринбург
+        center: [60.6057, 56.8389],
         zoom: 11,
         key: '{{ dg_key }}',
     });
 
-    // Добавление маркеров (в 2ГИС порядок [Lon, Lat])
+    const points = [];
     {% for ref in refuelings %}
         {% if ref.latitude %}
             new mapgl.Marker(map, {
                 coordinates: [{{ ref.longitude }}, {{ ref.latitude }}],
             });
+            points.push([{{ ref.longitude }}, {{ ref.latitude }}]);
         {% endif %}
     {% endfor %}
+
+    // Если есть точки, подгоним масштаб
+    if (points.length > 0) {
+        // У 2ГИС нет простого fitBounds в MapGL "из коробки" как в Leaflet,
+        // но мы центрируемся на последней точке
+        map.setCenter(points[0]);
+    }
+
+    const searchInput = document.getElementById('map-search');
+    searchInput.addEventListener('keypress', async (e) => {
+        if (e.key === 'Enter') {
+            const query = e.target.value;
+            const center = map.getCenter();
+            const url = `https://catalog.api.2gis.com/3.0/items?q=${encodeURIComponent(query)}&key={{ dg_key }}&fields=items.point&location=${center[0]},${center[1]}`;
+            const response = await fetch(url);
+            const data = await response.json();
+            if (data.result && data.result.items[0].point) {
+                const p = data.result.items[0].point;
+                map.setCenter([p.lon, p.lat]);
+                map.setZoom(16);
+            }
+        }
+    });
 </script>
 {% endblock %}

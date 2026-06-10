@@ -1,6 +1,33 @@
 {% extends 'tracker/base.html' %}
 
 {% block content %}
+<style>
+    .search-container {
+        position: absolute;
+        top: 15px;
+        left: 15px;
+        z-index: 1000;
+        width: 350px;
+    }
+    #search-results {
+        background: white;
+        border-radius: 0 0 10px 10px;
+        max-height: 300px;
+        overflow-y: auto;
+        display: none;
+        border: 1px solid #ddd;
+    }
+    .search-item {
+        padding: 12px;
+        cursor: pointer;
+        border-bottom: 1px solid #eee;
+        transition: 0.2s;
+    }
+    .search-item:hover { background: #f0f7ff; }
+    .search-item strong { color: #0d6efd; }
+    .search-item small { color: #6c757d; }
+</style>
+
 <div class="row mt-2">
     <div class="col-lg-5 col-md-6 mb-4">
         <div class="card shadow border-0">
@@ -17,48 +44,126 @@
                         </div>
                     {% endfor %}
                     <hr>
-                    <button type="submit" class="btn btn-success btn-lg w-100 rounded-pill shadow-sm">Сохранить</button>
-                    <a href="{% url 'dashboard' %}" class="btn btn-link w-100 text-muted mt-2">Назад</a>
+                    <button type="submit" class="btn btn-success btn-lg w-100 rounded-pill shadow-sm">Сохранить данные</button>
+                    <a href="{% url 'dashboard' %}" class="btn btn-link w-100 text-muted mt-2">Отмена</a>
                 </form>
             </div>
         </div>
     </div>
 
     <div class="col-lg-7 col-md-6">
-        <div class="card shadow border-0 overflow-hidden">
-            <div class="card-header bg-dark text-white py-3">
-                <h6 class="mb-0">Кликните на карту для выбора АЗС</h6>
+        <div class="card shadow border-0 overflow-hidden position-relative">
+            <!-- Улучшенный поиск -->
+            <div class="search-container">
+                <div class="input-group shadow">
+                    <input type="text" id="search-input" class="form-control border-0" placeholder="Название АЗС или адрес...">
+                    <button class="btn btn-white bg-white border-0 text-primary" type="button">🔍</button>
+                </div>
+                <div id="search-results" class="shadow"></div>
             </div>
-            <div id="map" style="height: 600px; width: 100%;"></div>
+
+            <div id="map" style="height: 650px; width: 100%;"></div>
         </div>
     </div>
 </div>
 
 <script>
-    // Карта 2ГИС
+    const mapKey = '{{ dg_key }}';
     const map = new mapgl.Map('map', {
-        center: [60.6057, 56.8389],
+        center: [60.6057, 56.8389], // Екатеринбург
         zoom: 13,
-        key: '{{ dg_key }}',
+        key: mapKey,
     });
 
     let marker;
 
-    // Клик по карте
-    map.on('click', (e) => {
-        const coords = e.lngLat; // [Lon, Lat]
-
+    function updateLocation(lat, lon, name = "") {
+        const coords = [lon, lat];
         if (marker) {
             marker.setCoordinates(coords);
         } else {
-            marker = new mapgl.Marker(map, {
-                coordinates: coords,
-            });
+            marker = new mapgl.Marker(map, { coordinates: coords });
+        }
+        map.setCenter(coords);
+        document.getElementById('id_latitude').value = lat.toFixed(6);
+        document.getElementById('id_longitude').value = lon.toFixed(6);
+    }
+
+    map.on('click', (e) => {
+        updateLocation(e.lngLat[1], e.lngLat[0]);
+    });
+
+    const searchInput = document.getElementById('search-input');
+    const searchResults = document.getElementById('search-results');
+
+    searchInput.addEventListener('input', async (e) => {
+        const query = e.target.value;
+        if (query.length < 2) {
+            searchResults.style.display = 'none';
+            return;
         }
 
-        // Заполняем поля формы (Lat - coords[1], Lon - coords[0])
-        document.getElementById('id_latitude').value = coords[1].toFixed(6);
-        document.getElementById('id_longitude').value = coords[0].toFixed(6);
+        const center = map.getCenter();
+        // API запрос: добавляем рубрику 162 (АЗС) и привязку к центру карты
+        const url = `https://catalog.api.2gis.com/3.0/items?q=${encodeURIComponent(query)}&key=${mapKey}&fields=items.point&rubric_id=162&location=${center[0]},${center[1]}&radius=50000`;
+
+        try {
+            const response = await fetch(url);
+            const data = await response.json();
+
+            if (data.result && data.result.items) {
+                searchResults.innerHTML = '';
+                searchResults.style.display = 'block';
+
+                data.result.items.forEach(item => {
+                    if (item.point) {
+                        const div = document.createElement('div');
+                        div.className = 'search-item';
+                        div.innerHTML = `<strong>${item.name}</strong><br><small>${item.address_name || 'Адрес не указан'}</small>`;
+                        div.onclick = () => {
+                            updateLocation(item.point.lat, item.point.lon);
+                            searchResults.style.display = 'none';
+                            searchInput.value = item.name;
+                            map.setZoom(16);
+                        };
+                        searchResults.appendChild(div);
+                    }
+                });
+            } else {
+                // Если по рубрике АЗС ничего не нашли, пробуем общий поиск (на случай поиска просто по адресу)
+                const fallbackUrl = `https://catalog.api.2gis.com/3.0/items?q=${encodeURIComponent(query)}&key=${mapKey}&fields=items.point&location=${center[0]},${center[1]}`;
+                const fbResponse = await fetch(fallbackUrl);
+                const fbData = await fbResponse.json();
+                if (fbData.result && fbData.result.items) {
+                    // ... логика отображения такая же ...
+                    searchResults.innerHTML = '';
+                    searchResults.style.display = 'block';
+                    fbData.result.items.forEach(item => {
+                        if (item.point) {
+                            const div = document.createElement('div');
+                            div.className = 'search-item';
+                            div.innerHTML = `<strong>${item.name}</strong><br><small>${item.address_name || ''}</small>`;
+                            div.onclick = () => {
+                                updateLocation(item.point.lat, item.point.lon);
+                                searchResults.style.display = 'none';
+                                searchInput.value = item.name;
+                                map.setZoom(16);
+                            };
+                            searchResults.appendChild(div);
+                        }
+                    });
+                }
+            }
+        } catch (error) {
+            console.error('Ошибка:', error);
+        }
+    });
+
+    // Закрыть поиск при клике вне его
+    document.addEventListener('click', (e) => {
+        if (!searchInput.contains(e.target) && !searchResults.contains(e.target)) {
+            searchResults.style.display = 'none';
+        }
     });
 </script>
 {% endblock %}
