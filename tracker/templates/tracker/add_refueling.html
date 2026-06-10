@@ -6,8 +6,6 @@
     #search-results { background: white; border-radius: 0 0 10px 10px; max-height: 300px; overflow-y: auto; display: none; border: 1px solid #ddd; }
     .search-item { padding: 12px; cursor: pointer; border-bottom: 1px solid #eee; font-size: 14px; }
     .search-item:hover { background: #f0f7ff; }
-    .search-item strong { color: #0d6efd; display: block; }
-    .search-item small { color: #6c757d; }
 </style>
 
 <div class="row mt-2">
@@ -26,7 +24,7 @@
                         </div>
                     {% endfor %}
                     <div class="alert alert-info py-2 small shadow-sm border-0">
-                        <b>Калькулятор:</b> Сумма обновится автоматически.
+                        <b>Автоматизация:</b> Цена и сумма подставятся сами при выборе сети АЗС.
                     </div>
                     <hr>
                     <button type="submit" class="btn btn-success btn-lg w-100 rounded-pill shadow-sm">Сохранить</button>
@@ -40,25 +38,49 @@
         <div class="card shadow border-0 overflow-hidden position-relative">
             <div class="search-container">
                 <div class="input-group shadow">
-                    <input type="text" id="search-input" class="form-control border-0" placeholder="Начните вводить (напр. Лукойл)..." autocomplete="off">
+                    <input type="text" id="search-input" class="form-control border-0" placeholder="Найти АЗС..." autocomplete="off">
                     <button class="btn btn-white bg-white border-0 text-primary" type="button">🔍</button>
                 </div>
                 <div id="search-results" class="shadow"></div>
             </div>
-            <div id="map" style="height: 680px; width: 100%;"></div>
+            <div id="map" style="height: 700px; width: 100%;"></div>
         </div>
     </div>
 </div>
 
 <script>
-    // --- 1. КАРТА И ЛОКАЦИЯ ---
-    const dgKey = '{{ dg_key }}';
-    const map = new mapgl.Map('map', {
-        center: [60.6057, 56.8389],
-        zoom: 13,
-        key: dgKey,
+    // --- ДАННЫЕ О ЦЕНАХ ИЗ DJANGO ---
+    const priceMap = {{ price_map_json|safe }};
+
+    // Элементы формы
+    const networkSelect = document.querySelector('select[name="network"]');
+    const priceInput = document.getElementById('id_price_per_liter');
+    const amountInput = document.getElementById('id_fuel_amount');
+    const totalInput = document.getElementById('id_price_total');
+
+    // Функция расчета итоговой суммы
+    function calculateTotal() {
+        const amount = parseFloat(amountInput.value.replace(',', '.')) || 0;
+        const price = parseFloat(priceInput.value.replace(',', '.')) || 0;
+        totalInput.value = (amount * price).toFixed(2);
+    }
+
+    // Слушатель изменения Сети АЗС
+    networkSelect.addEventListener('change', function() {
+        const selectedId = this.value;
+        if (priceMap[selectedId]) {
+            priceInput.value = priceMap[selectedId]; // Подставляем цену
+            calculateTotal(); // Пересчитываем сумму
+        }
     });
 
+    // Слушатели для ручного ввода
+    amountInput.addEventListener('input', calculateTotal);
+    priceInput.addEventListener('input', calculateTotal);
+
+    // --- КАРТА И ПОИСК (без изменений) ---
+    const dgKey = '{{ dg_key }}';
+    const map = new mapgl.Map('map', { center: [60.6057, 56.8389], zoom: 13, key: dgKey });
     let marker;
 
     function updateLocation(lat, lon) {
@@ -72,49 +94,25 @@
 
     map.on('click', (e) => { updateLocation(e.lngLat[1], e.lngLat[0]); });
 
-    // --- 2. КАЛЬКУЛЯТОР ---
-    const amountInput = document.getElementById('id_fuel_amount');
-    const priceInput = document.getElementById('id_price_per_liter');
-    const totalInput = document.getElementById('id_price_total');
-
-    function calculateTotal() {
-        const amount = parseFloat(amountInput.value.replace(',', '.')) || 0;
-        const price = parseFloat(priceInput.value.replace(',', '.')) || 0;
-        totalInput.value = (amount * price).toFixed(2);
-    }
-
-    if(amountInput) amountInput.addEventListener('input', calculateTotal);
-    if(priceInput) priceInput.addEventListener('input', calculateTotal);
-
-    // --- 3. ИСПРАВЛЕННЫЙ ПОИСК ---
     const searchInput = document.getElementById('search-input');
     const searchResults = document.getElementById('search-results');
 
     searchInput.addEventListener('input', async (e) => {
         let query = e.target.value;
-        if (query.length < 3) {
-            searchResults.style.display = 'none';
-            return;
-        }
-
+        if (query.length < 3) { searchResults.style.display = 'none'; return; }
         const center = map.getCenter();
-        // Добавляем "АЗС " в начало запроса для точности
-        const fullQuery = "АЗС " + query;
-        const url = `https://catalog.api.2gis.com/3.0/items?q=${encodeURIComponent(fullQuery)}&key=${dgKey}&fields=items.point&location=${center[0]},${center[1]}&sort_point=${center[0]},${center[1]}&radius=50000`;
-
+        const url = `https://catalog.api.2gis.com/3.0/items?q=${encodeURIComponent("АЗС " + query)}&key=${dgKey}&fields=items.point&location=${center[0]},${center[1]}&sort_point=${center[0]},${center[1]}&radius=50000`;
         try {
             const response = await fetch(url);
             const data = await response.json();
-
             if (data.result && data.result.items) {
                 searchResults.innerHTML = '';
                 searchResults.style.display = 'block';
-
                 data.result.items.forEach(item => {
                     if (item.point) {
                         const div = document.createElement('div');
                         div.className = 'search-item';
-                        div.innerHTML = `<strong>${item.name}</strong><small>${item.address_name || 'Адрес не указан'}</small>`;
+                        div.innerHTML = `<strong>${item.name}</strong><small>${item.address_name || ''}</small>`;
                         div.onclick = () => {
                             updateLocation(item.point.lat, item.point.lon);
                             searchResults.style.display = 'none';
@@ -125,15 +123,7 @@
                     }
                 });
             }
-        } catch (err) {
-            console.error("Ошибка 2ГИС:", err);
-        }
-    });
-
-    document.addEventListener('click', (e) => {
-        if (!searchInput.contains(e.target) && !searchResults.contains(e.target)) {
-            searchResults.style.display = 'none';
-        }
+        } catch (err) { console.error(err); }
     });
 </script>
 {% endblock %}
