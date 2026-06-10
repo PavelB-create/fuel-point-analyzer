@@ -2,29 +2,11 @@
 
 {% block content %}
 <style>
-    .search-container {
-        position: absolute;
-        top: 15px;
-        left: 15px;
-        z-index: 1000;
-        width: 350px;
-    }
-    #search-results {
-        background: white;
-        border-radius: 0 0 10px 10px;
-        max-height: 300px;
-        overflow-y: auto;
-        display: none;
-        border: 1px solid #ddd;
-    }
-    .search-item {
-        padding: 12px;
-        cursor: pointer;
-        border-bottom: 1px solid #eee;
-        transition: 0.2s;
-    }
+    .search-container { position: absolute; top: 15px; left: 15px; z-index: 1000; width: 350px; }
+    #search-results { background: white; border-radius: 0 0 10px 10px; max-height: 300px; overflow-y: auto; display: none; border: 1px solid #ddd; }
+    .search-item { padding: 12px; cursor: pointer; border-bottom: 1px solid #eee; font-size: 14px; }
     .search-item:hover { background: #f0f7ff; }
-    .search-item strong { color: #0d6efd; }
+    .search-item strong { color: #0d6efd; display: block; }
     .search-item small { color: #6c757d; }
 </style>
 
@@ -43,8 +25,11 @@
                             {{ field }}
                         </div>
                     {% endfor %}
+                    <div class="alert alert-info py-2 small shadow-sm border-0">
+                        <b>Калькулятор:</b> Сумма обновится автоматически.
+                    </div>
                     <hr>
-                    <button type="submit" class="btn btn-success btn-lg w-100 rounded-pill shadow-sm">Сохранить данные</button>
+                    <button type="submit" class="btn btn-success btn-lg w-100 rounded-pill shadow-sm">Сохранить</button>
                     <a href="{% url 'dashboard' %}" class="btn btn-link w-100 text-muted mt-2">Отмена</a>
                 </form>
             </div>
@@ -53,59 +38,69 @@
 
     <div class="col-lg-7 col-md-6">
         <div class="card shadow border-0 overflow-hidden position-relative">
-            <!-- Улучшенный поиск -->
             <div class="search-container">
                 <div class="input-group shadow">
-                    <input type="text" id="search-input" class="form-control border-0" placeholder="Название АЗС или адрес...">
+                    <input type="text" id="search-input" class="form-control border-0" placeholder="Начните вводить (напр. Лукойл)..." autocomplete="off">
                     <button class="btn btn-white bg-white border-0 text-primary" type="button">🔍</button>
                 </div>
                 <div id="search-results" class="shadow"></div>
             </div>
-
-            <div id="map" style="height: 650px; width: 100%;"></div>
+            <div id="map" style="height: 680px; width: 100%;"></div>
         </div>
     </div>
 </div>
 
 <script>
-    const mapKey = '{{ dg_key }}';
+    // --- 1. КАРТА И ЛОКАЦИЯ ---
+    const dgKey = '{{ dg_key }}';
     const map = new mapgl.Map('map', {
-        center: [60.6057, 56.8389], // Екатеринбург
+        center: [60.6057, 56.8389],
         zoom: 13,
-        key: mapKey,
+        key: dgKey,
     });
 
     let marker;
 
-    function updateLocation(lat, lon, name = "") {
+    function updateLocation(lat, lon) {
         const coords = [lon, lat];
-        if (marker) {
-            marker.setCoordinates(coords);
-        } else {
-            marker = new mapgl.Marker(map, { coordinates: coords });
-        }
+        if (marker) { marker.setCoordinates(coords); }
+        else { marker = new mapgl.Marker(map, { coordinates: coords }); }
         map.setCenter(coords);
         document.getElementById('id_latitude').value = lat.toFixed(6);
         document.getElementById('id_longitude').value = lon.toFixed(6);
     }
 
-    map.on('click', (e) => {
-        updateLocation(e.lngLat[1], e.lngLat[0]);
-    });
+    map.on('click', (e) => { updateLocation(e.lngLat[1], e.lngLat[0]); });
 
+    // --- 2. КАЛЬКУЛЯТОР ---
+    const amountInput = document.getElementById('id_fuel_amount');
+    const priceInput = document.getElementById('id_price_per_liter');
+    const totalInput = document.getElementById('id_price_total');
+
+    function calculateTotal() {
+        const amount = parseFloat(amountInput.value.replace(',', '.')) || 0;
+        const price = parseFloat(priceInput.value.replace(',', '.')) || 0;
+        totalInput.value = (amount * price).toFixed(2);
+    }
+
+    if(amountInput) amountInput.addEventListener('input', calculateTotal);
+    if(priceInput) priceInput.addEventListener('input', calculateTotal);
+
+    // --- 3. ИСПРАВЛЕННЫЙ ПОИСК ---
     const searchInput = document.getElementById('search-input');
     const searchResults = document.getElementById('search-results');
 
     searchInput.addEventListener('input', async (e) => {
-        const query = e.target.value;
-        if (query.length < 2) {
+        let query = e.target.value;
+        if (query.length < 3) {
             searchResults.style.display = 'none';
             return;
         }
 
         const center = map.getCenter();
-        // API запрос: добавляем рубрику 162 (АЗС) и привязку к центру карты
-        const url = `https://catalog.api.2gis.com/3.0/items?q=${encodeURIComponent(query)}&key=${mapKey}&fields=items.point&rubric_id=162&location=${center[0]},${center[1]}&radius=50000`;
+        // Добавляем "АЗС " в начало запроса для точности
+        const fullQuery = "АЗС " + query;
+        const url = `https://catalog.api.2gis.com/3.0/items?q=${encodeURIComponent(fullQuery)}&key=${dgKey}&fields=items.point&location=${center[0]},${center[1]}&sort_point=${center[0]},${center[1]}&radius=50000`;
 
         try {
             const response = await fetch(url);
@@ -119,7 +114,7 @@
                     if (item.point) {
                         const div = document.createElement('div');
                         div.className = 'search-item';
-                        div.innerHTML = `<strong>${item.name}</strong><br><small>${item.address_name || 'Адрес не указан'}</small>`;
+                        div.innerHTML = `<strong>${item.name}</strong><small>${item.address_name || 'Адрес не указан'}</small>`;
                         div.onclick = () => {
                             updateLocation(item.point.lat, item.point.lon);
                             searchResults.style.display = 'none';
@@ -129,37 +124,12 @@
                         searchResults.appendChild(div);
                     }
                 });
-            } else {
-                // Если по рубрике АЗС ничего не нашли, пробуем общий поиск (на случай поиска просто по адресу)
-                const fallbackUrl = `https://catalog.api.2gis.com/3.0/items?q=${encodeURIComponent(query)}&key=${mapKey}&fields=items.point&location=${center[0]},${center[1]}`;
-                const fbResponse = await fetch(fallbackUrl);
-                const fbData = await fbResponse.json();
-                if (fbData.result && fbData.result.items) {
-                    // ... логика отображения такая же ...
-                    searchResults.innerHTML = '';
-                    searchResults.style.display = 'block';
-                    fbData.result.items.forEach(item => {
-                        if (item.point) {
-                            const div = document.createElement('div');
-                            div.className = 'search-item';
-                            div.innerHTML = `<strong>${item.name}</strong><br><small>${item.address_name || ''}</small>`;
-                            div.onclick = () => {
-                                updateLocation(item.point.lat, item.point.lon);
-                                searchResults.style.display = 'none';
-                                searchInput.value = item.name;
-                                map.setZoom(16);
-                            };
-                            searchResults.appendChild(div);
-                        }
-                    });
-                }
             }
-        } catch (error) {
-            console.error('Ошибка:', error);
+        } catch (err) {
+            console.error("Ошибка 2ГИС:", err);
         }
     });
 
-    // Закрыть поиск при клике вне его
     document.addEventListener('click', (e) => {
         if (!searchInput.contains(e.target) && !searchResults.contains(e.target)) {
             searchResults.style.display = 'none';
