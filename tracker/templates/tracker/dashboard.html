@@ -1,60 +1,60 @@
 {% extends 'tracker/base.html' %}
 
 {% block content %}
-<div class="container-fluid">
+<div class="container-fluid mt-3">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2 class="fw-bold">Аналитика топлива</h2>
-        <a href="{% url 'add_refueling' %}" class="btn btn-primary btn-lg shadow-sm rounded-pill px-4">+ Добавить заправку</a>
+        <h2 class="fw-bold">⛽ FuelPoint Analyzer</h2>
+        <a href="{% url 'add_refueling' %}" class="btn btn-primary btn-lg shadow rounded-pill px-4">+ Добавить заправку</a>
     </div>
 
     <div class="row">
         <div class="col-lg-4">
-            <div class="card mb-4 shadow-sm text-center py-4 border-start border-primary border-5">
+            <div class="card mb-4 shadow border-0 text-center py-4">
                 <div class="card-body">
                     <h6 class="text-uppercase text-muted small fw-bold">{{ vehicle.brand }} {{ vehicle.model }}</h6>
                     {% if stats %}
-                        <div class="display-5 fw-bold text-primary">{{ stats.avg_consumption }}</div>
-                        <div class="text-primary mb-3">л/100км</div>
-                        <div class="badge bg-light text-dark p-2 px-3 border rounded-pill">
-                            Стоимость км: <strong>{{ stats.avg_cost_km }} руб.</strong>
+                        <div class="display-4 fw-bold text-primary">{{ stats.avg_consumption }}</div>
+                        <div class="text-primary mb-3">л/100км (средний)</div>
+                        <div class="p-2 bg-light rounded-pill mb-3">
+                            <small class="text-muted">Стоимость 1 км:</small> <strong>{{ stats.avg_cost_km }} руб.</strong>
                         </div>
+                        <hr>
+                        <h6 class="fw-bold mb-3 small text-uppercase text-start">Эффективность брендов:</h6>
+                        <ul class="list-group list-group-flush text-start">
+                            {% for brand, cons in stats.brand_stats.items %}
+                            <li class="list-group-item d-flex justify-content-between align-items-center bg-transparent border-0 px-0 py-1">
+                                <span class="small">{{ brand }}</span>
+                                <span class="badge {% if cons <= stats.avg_consumption %}bg-success{% else %}bg-warning text-dark{% endif %} rounded-pill">{{ cons }} л.</span>
+                            </li>
+                            {% endfor %}
+                        </ul>
                     {% else %}
-                        <div class="h5 text-danger py-3">Нужно 2 заправки</div>
+                        <div class="h5 text-danger py-4">Нужно минимум 2 заправки</div>
                     {% endif %}
                 </div>
             </div>
 
             {% if chart %}
-            <div class="card shadow-sm border-0 overflow-hidden mb-4">
-                <div class="card-header bg-white border-0 py-3"><h6 class="m-0 fw-bold">Динамика расхода</h6></div>
-                <div class="card-body p-0">
-                    <img src="data:image/png;base64,{{ chart }}" class="img-fluid w-100">
-                </div>
+            <div class="card shadow border-0 overflow-hidden mb-4">
+                <div class="card-body p-0"><img src="data:image/png;base64,{{ chart }}" class="img-fluid w-100"></div>
             </div>
             {% endif %}
         </div>
 
         <div class="col-lg-8">
-            <div class="card shadow-sm border-0 overflow-hidden mb-4 position-relative">
-                <div style="position: absolute; top: 10px; left: 10px; z-index: 1000; width: 280px;">
-                    <input type="text" id="map-search" class="form-control shadow border-0" placeholder="🔍 Найти на карте...">
-                </div>
-                <div id="map" style="height: 480px; width: 100%;"></div>
-            </div>
-
-            <div class="card shadow-sm border-0">
+            <div class="card shadow border-0 overflow-hidden mb-4"><div id="map" style="height: 480px; width: 100%;"></div></div>
+            <div class="card shadow border-0">
                 <div class="table-responsive">
                     <table class="table table-hover mb-0 text-center">
-                        <thead class="table-light">
-                            <tr><th>Дата</th><th>Пробег</th><th>Литры</th><th>АЗС</th></tr>
-                        </thead>
+                        <thead class="table-dark"><tr><th>Дата</th><th>Пробег</th><th>Литры</th><th>Топливо</th><th>АЗС</th></tr></thead>
                         <tbody>
                             {% for ref in refuelings %}
                             <tr>
-                                <td class="text-muted small">{{ ref.date }}</td>
+                                <td class="text-muted">{{ ref.date }}</td>
                                 <td class="fw-bold">{{ ref.odometer }} км</td>
                                 <td>{{ ref.fuel_amount }} л</td>
-                                <td><span class="badge bg-secondary rounded-pill">{{ ref.network.name }}</span></td>
+                                <td><span class="badge bg-info text-dark">{{ ref.get_fuel_type_display }}</span></td>
+                                <td><span class="badge bg-secondary">{{ ref.network.name }}</span></td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -66,43 +66,14 @@
 </div>
 
 <script>
-    const map = new mapgl.Map('map', {
-        center: [60.6057, 56.8389],
-        zoom: 11,
-        key: '{{ dg_key }}',
-    });
-
+    const map = new mapgl.Map('map', { center: [60.6057, 56.8389], zoom: 11, key: '{{ dg_key }}' });
     const points = [];
     {% for ref in refuelings %}
         {% if ref.latitude %}
-            new mapgl.Marker(map, {
-                coordinates: [{{ ref.longitude }}, {{ ref.latitude }}],
-            });
+            new mapgl.Marker(map, { coordinates: [{{ ref.longitude }}, {{ ref.latitude }}] });
             points.push([{{ ref.longitude }}, {{ ref.latitude }}]);
         {% endif %}
     {% endfor %}
-
-    // Если есть точки, подгоним масштаб
-    if (points.length > 0) {
-        // У 2ГИС нет простого fitBounds в MapGL "из коробки" как в Leaflet,
-        // но мы центрируемся на последней точке
-        map.setCenter(points[0]);
-    }
-
-    const searchInput = document.getElementById('map-search');
-    searchInput.addEventListener('keypress', async (e) => {
-        if (e.key === 'Enter') {
-            const query = e.target.value;
-            const center = map.getCenter();
-            const url = `https://catalog.api.2gis.com/3.0/items?q=${encodeURIComponent(query)}&key={{ dg_key }}&fields=items.point&location=${center[0]},${center[1]}`;
-            const response = await fetch(url);
-            const data = await response.json();
-            if (data.result && data.result.items[0].point) {
-                const p = data.result.items[0].point;
-                map.setCenter([p.lon, p.lat]);
-                map.setZoom(16);
-            }
-        }
-    });
+    if (points.length > 0) map.setCenter(points[0]);
 </script>
 {% endblock %}

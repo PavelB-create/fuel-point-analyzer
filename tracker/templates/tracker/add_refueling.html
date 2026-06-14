@@ -3,127 +3,99 @@
 {% block content %}
 <style>
     .search-container { position: absolute; top: 15px; left: 15px; z-index: 1000; width: 350px; }
-    #search-results { background: white; border-radius: 0 0 10px 10px; max-height: 300px; overflow-y: auto; display: none; border: 1px solid #ddd; }
-    .search-item { padding: 12px; cursor: pointer; border-bottom: 1px solid #eee; font-size: 14px; }
+    #search-results { background: white; border-radius: 0 0 10px 10px; max-height: 250px; overflow-y: auto; display: none; border: 1px solid #ddd; }
+    .search-item { padding: 12px; cursor: pointer; border-bottom: 1px solid #eee; }
     .search-item:hover { background: #f0f7ff; }
 </style>
 
 <div class="row mt-2">
     <div class="col-lg-5 col-md-6 mb-4">
-        <div class="card shadow border-0">
-            <div class="card-header bg-primary text-white py-3">
-                <h5 class="mb-0 fw-bold">Новая заправка</h5>
-            </div>
-            <div class="card-body">
-                <form method="post" id="refuel-form">
-                    {% csrf_token %}
-                    {% for field in form %}
-                        <div class="mb-3">
-                            <label class="form-label small fw-bold text-muted">{{ field.label }}</label>
-                            {{ field }}
-                        </div>
-                    {% endfor %}
-                    <div class="alert alert-info py-2 small shadow-sm border-0">
-                        <b>Автоматизация:</b> Цена и сумма подставятся сами при выборе сети АЗС.
+        <div class="card shadow border-0 p-3">
+            <h5 class="fw-bold text-primary mb-3">Новая заправка</h5>
+            <form method="post" id="refuel-form">
+                {% csrf_token %}
+                {% for field in form %}
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold text-muted mb-1">{{ field.label }}</label>
+                        {{ field }}
                     </div>
-                    <hr>
-                    <button type="submit" class="btn btn-success btn-lg w-100 rounded-pill shadow-sm">Сохранить</button>
-                    <a href="{% url 'dashboard' %}" class="btn btn-link w-100 text-muted mt-2">Отмена</a>
-                </form>
-            </div>
+                {% endfor %}
+                <button type="submit" class="btn btn-primary btn-lg w-100 rounded-pill mt-3 shadow">Сохранить</button>
+            </form>
         </div>
     </div>
 
     <div class="col-lg-7 col-md-6">
         <div class="card shadow border-0 overflow-hidden position-relative">
             <div class="search-container">
-                <div class="input-group shadow">
-                    <input type="text" id="search-input" class="form-control border-0" placeholder="Найти АЗС..." autocomplete="off">
-                    <button class="btn btn-white bg-white border-0 text-primary" type="button">🔍</button>
-                </div>
+                <input type="text" id="search-input" class="form-control shadow border-0" placeholder="Найти АЗС (напр. Лукойл)...">
                 <div id="search-results" class="shadow"></div>
             </div>
-            <div id="map" style="height: 700px; width: 100%;"></div>
+            <div id="map" style="height: 720px; width: 100%;"></div>
         </div>
     </div>
 </div>
 
 <script>
-    // --- ДАННЫЕ О ЦЕНАХ ИЗ DJANGO ---
-    const priceMap = {{ price_map_json|safe }};
-
-    // Элементы формы
+    // 1. АВТОПОДСТАНОВКА ЦЕН И КАЛЬКУЛЯТОР
+    const priceMatrix = {{ price_matrix_json|safe }};
     const networkSelect = document.querySelector('select[name="network"]');
+    const fuelTypeSelect = document.querySelector('select[name="fuel_type"]');
     const priceInput = document.getElementById('id_price_per_liter');
     const amountInput = document.getElementById('id_fuel_amount');
     const totalInput = document.getElementById('id_price_total');
 
-    // Функция расчета итоговой суммы
-    function calculateTotal() {
-        const amount = parseFloat(amountInput.value.replace(',', '.')) || 0;
-        const price = parseFloat(priceInput.value.replace(',', '.')) || 0;
+    function updatePriceAndTotal() {
+        const netId = networkSelect.value;
+        const type = fuelTypeSelect.value;
+        if (priceMatrix[netId]) {
+            priceInput.value = priceMatrix[netId][type];
+        }
+        const amount = parseFloat(amountInput.value) || 0;
+        const price = parseFloat(priceInput.value) || 0;
         totalInput.value = (amount * price).toFixed(2);
     }
 
-    // Слушатель изменения Сети АЗС
-    networkSelect.addEventListener('change', function() {
-        const selectedId = this.value;
-        if (priceMap[selectedId]) {
-            priceInput.value = priceMap[selectedId]; // Подставляем цену
-            calculateTotal(); // Пересчитываем сумму
-        }
+    [networkSelect, fuelTypeSelect, amountInput, priceInput].forEach(el => {
+        el.addEventListener('change', updatePriceAndTotal);
+        el.addEventListener('input', updatePriceAndTotal);
     });
 
-    // Слушатели для ручного ввода
-    amountInput.addEventListener('input', calculateTotal);
-    priceInput.addEventListener('input', calculateTotal);
-
-    // --- КАРТА И ПОИСК (без изменений) ---
+    // 2. КАРТА 2ГИС
     const dgKey = '{{ dg_key }}';
     const map = new mapgl.Map('map', { center: [60.6057, 56.8389], zoom: 13, key: dgKey });
     let marker;
 
-    function updateLocation(lat, lon) {
-        const coords = [lon, lat];
-        if (marker) { marker.setCoordinates(coords); }
-        else { marker = new mapgl.Marker(map, { coordinates: coords }); }
-        map.setCenter(coords);
+    function setLoc(lat, lon) {
+        const c = [lon, lat];
+        if (marker) marker.setCoordinates(c); else marker = new mapgl.Marker(map, { coordinates: c });
+        map.setCenter(c);
         document.getElementById('id_latitude').value = lat.toFixed(6);
         document.getElementById('id_longitude').value = lon.toFixed(6);
     }
 
-    map.on('click', (e) => { updateLocation(e.lngLat[1], e.lngLat[0]); });
+    map.on('click', (e) => setLoc(e.lngLat[1], e.lngLat[0]));
 
-    const searchInput = document.getElementById('search-input');
-    const searchResults = document.getElementById('search-results');
-
-    searchInput.addEventListener('input', async (e) => {
-        let query = e.target.value;
-        if (query.length < 3) { searchResults.style.display = 'none'; return; }
-        const center = map.getCenter();
-        const url = `https://catalog.api.2gis.com/3.0/items?q=${encodeURIComponent("АЗС " + query)}&key=${dgKey}&fields=items.point&location=${center[0]},${center[1]}&sort_point=${center[0]},${center[1]}&radius=50000`;
-        try {
-            const response = await fetch(url);
-            const data = await response.json();
-            if (data.result && data.result.items) {
-                searchResults.innerHTML = '';
-                searchResults.style.display = 'block';
-                data.result.items.forEach(item => {
-                    if (item.point) {
-                        const div = document.createElement('div');
-                        div.className = 'search-item';
-                        div.innerHTML = `<strong>${item.name}</strong><small>${item.address_name || ''}</small>`;
-                        div.onclick = () => {
-                            updateLocation(item.point.lat, item.point.lon);
-                            searchResults.style.display = 'none';
-                            searchInput.value = item.name;
-                            map.setZoom(16);
-                        };
-                        searchResults.appendChild(div);
-                    }
-                });
-            }
-        } catch (err) { console.error(err); }
+    // 3. ПОИСК
+    const sInp = document.getElementById('search-input');
+    const sRes = document.getElementById('search-results');
+    sInp.addEventListener('input', async (e) => {
+        if (e.target.value.length < 3) { sRes.style.display='none'; return; }
+        const url = `https://catalog.api.2gis.com/3.0/items?q=${encodeURIComponent("АЗС "+e.target.value)}&key=${dgKey}&fields=items.point&location=${map.getCenter()[0]},${map.getCenter()[1]}&radius=50000`;
+        const res = await fetch(url);
+        const data = await res.json();
+        if (data.result) {
+            sRes.innerHTML = ''; sRes.style.display = 'block';
+            data.result.items.forEach(item => {
+                if (item.point) {
+                    const d = document.createElement('div');
+                    d.className = 'search-item';
+                    d.innerHTML = `<strong>${item.name}</strong><small>${item.address_name || ''}</small>`;
+                    d.onclick = () => { setLoc(item.point.lat, item.point.lon); sRes.style.display='none'; sInp.value=item.name; map.setZoom(16); };
+                    sRes.appendChild(d);
+                }
+            });
+        }
     });
 </script>
 {% endblock %}

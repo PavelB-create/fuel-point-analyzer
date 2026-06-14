@@ -3,11 +3,12 @@ from django.contrib.auth.models import User
 
 class FuelNetwork(models.Model):
     name = models.CharField(max_length=100, verbose_name="Название сети")
-    # НОВОЕ ПОЛЕ: цена, которая будет подставляться автоматически
-    default_price = models.FloatField(default=55.0, verbose_name="Цена за 1л (по умолчанию)")
+    price_92 = models.FloatField(default=50.0, verbose_name="Цена 92")
+    price_95 = models.FloatField(default=55.0, verbose_name="Цена 95")
+    price_diesel = models.FloatField(default=60.0, verbose_name="Цена ДТ")
 
     def __str__(self):
-        return f"{self.name} ({self.default_price} руб.)"
+        return self.name
 
 class Vehicle(models.Model):
     owner = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="Владелец")
@@ -17,8 +18,15 @@ class Vehicle(models.Model):
         return f"{self.brand} {self.model}"
 
 class Refueling(models.Model):
-    vehicle = models.ForeignKey(Vehicle, on_delete=models.CASCADE, related_name='refuelings')
+    FUEL_CHOICES = [
+        ('92', 'АИ-92'),
+        ('95', 'АИ-95'),
+        ('DT', 'Дизель'),
+    ]
+
+    vehicle = models.ForeignKey(Vehicle, on_delete=models.CASCADE, related_name='refuelings', verbose_name="Автомобиль")
     network = models.ForeignKey(FuelNetwork, on_delete=models.SET_NULL, null=True, verbose_name="Сеть АЗС")
+    fuel_type = models.CharField(max_length=10, choices=FUEL_CHOICES, default='95', verbose_name="Тип топлива")
     date = models.DateField(auto_now_add=True, verbose_name="Дата")
     odometer = models.PositiveIntegerField(verbose_name="Пробег (км)")
     fuel_amount = models.FloatField(verbose_name="Количество литров")
@@ -31,4 +39,4 @@ class Refueling(models.Model):
         ordering = ['-odometer']
 
     def __str__(self):
-        return f"{self.date} - {self.vehicle.brand}"
+        return f"{self.date} - {self.vehicle.brand} ({self.fuel_type})"
