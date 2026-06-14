@@ -1,6 +1,23 @@
-.venv/
-venv/
-*.pyc
+# Python
 __pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+
+# Django
 db.sqlite3
+db.sqlite3-journal
+media/
+static/
+
+# Секреты (ОБЯЗАТЕЛЬНО)
+.env
+local_settings.py
+
+# IDE
 .idea/
+.vscode/
+*.swp
+*.DS_Store
